@@ -1,2 +1,4 @@
 psycopg2
 tk
+pytest
+pytest-cov
