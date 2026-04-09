@@ -71,14 +71,37 @@ class InventoryService:
 
         return False, "Failed to delete product."
 
-
-    def get_all_products(self, search_term=""):
-        if search_term:
-            query = "SELECT * FROM products WHERE name LIKE ? OR sku LIKE ?"
-            res = self.db.execute_query(query, (f'%{search_term}%', f'%{search_term}%'), is_read=True)
+    def get_all_products(self, search_term="", min_price=None, max_price=None):
+        """Enhanced product search with price filtering (SRS FR-5)"""
+        if search_term or min_price or max_price:
+            return self.search_products_advanced(search_term, min_price, max_price)
         else:
             res = self.db.execute_query("SELECT * FROM products", is_read=True)
-        return res if res else []
+            return res if res else []
+    
+    def search_products_advanced(self, search_term="", min_price=None, max_price=None):
+        """Advanced search with price range filtering (SRS FR-5)"""
+        if search_term:
+            base_query = """
+            SELECT * FROM products 
+            WHERE (name LIKE ? OR sku LIKE ?) 
+            """
+            params = [f"%{search_term}%", f"%{search_term}%"]
+        else:
+            base_query = "SELECT * FROM products WHERE 1=1"
+            params = []
+        
+        if min_price is not None:
+            base_query += " AND unitcost >= ?"
+            params.append(float(min_price))
+        
+        if max_price is not None:
+            base_query += " AND unitcost <= ?"
+            params.append(float(max_price))
+        
+        base_query += " ORDER BY name"
+        result = self.db.execute_query(base_query, tuple(params), is_read=True)
+        return result if result else []
 
     def process_transaction(self, sku, trans_type, quantity):
         products = self.db.execute_query(

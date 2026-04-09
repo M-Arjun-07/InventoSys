@@ -33,17 +33,20 @@ class LoginApp:
     def check_network_status(self):
         is_online = self.service.get_network_status()
         if is_online:
-            self.status_lbl.config(text="🟢 Internet Available", foreground="green")
+            self.status_lbl.config(text="✅ Internet Available", foreground="green")
         else:
-            self.status_lbl.config(text="🔴 No Internet (Local Mode)", foreground="red")
-        self.root.after(5000, self.check_network_status)
+            self.status_lbl.config(text="❌ No Internet (Local Mode)", foreground="red")
+
+        self.after_id = self.root.after(5000, self.check_network_status)
 
     def login(self):
         user = self.user_entry.get()
         pwd = self.pass_entry.get()
         success, role = self.service.login_user(user, pwd)
-        
+
         if success:
+            if self.after_id:
+                self.root.after_cancel(self.after_id)
             self.root.destroy()
             self.launch_main_app(user, role)
         else:
@@ -108,8 +111,8 @@ class InventoryApp:
         self.setup_transactions()
         self.refresh_table()
         
-        # AUTO SYNC ON STARTUP
-        self.root.after(1000, self.run_sync_background)
+        # AUTO REFRESH EVERY 30 SECONDS
+        self.start_auto_refresh()
 
     def logout(self):
         if messagebox.askyesno("Logout", "Are you sure you want to logout?"):
@@ -170,7 +173,9 @@ class InventoryApp:
         self.tree.pack(side="left", fill="both", expand=True, padx=10, pady=5)
         sb.pack(side="right", fill="y", pady=5)
         
-        self.tree.tag_configure("low_stock", background="#ffdddd")
+        self.tree.tag_configure("low_stock", background="#fff3cd", foreground="#856404")
+        self.tree.tag_configure("empty_stock", background="#f8d7da", foreground="#721c24")
+        self.tree.tag_configure("normal", background="white", foreground="black")
 
     def setup_manage_products(self):
         frame = ttk.LabelFrame(self.tab_manage, text="Add New Product", padding=20)
@@ -243,16 +248,37 @@ class InventoryApp:
         self.refresh_users()
 
     def refresh_table(self):
+        """Refresh dashboard with color-coded low stock (SRS FR-6)"""
         for item in self.tree.get_children():
             self.tree.delete(item)
+        
         rows = self.service.get_all_products(self.search_var.get())
+        
         for row in rows:
-            display_row = row[1:] 
-            if row[3] <= row[6]:
-                self.tree.insert("", "end", values=display_row, tags=("low_stock",))
+            display_row = [row[1], row[2], row[3], row[4], row[5], row[6]]  # SKU,Name,Stock,Cost,Price,Min
+            
+            current_stock = row[3]
+            min_stock = row[6]
+            
+            # Color coding per SRS FR-6
+            if current_stock == 0:
+                tag = "empty_stock"  # Red
+            elif current_stock < min_stock:
+                tag = "low_stock"    # Orange
             else:
-                self.tree.insert("", "end", values=display_row)
+                tag = "normal"       # Green/default
+                
+            self.tree.insert("", "end", values=display_row, tags=(tag,))
+        
+        # Configure colors if not already set
+        self.tree.tag_configure("low_stock", background="#fff3cd", foreground="#856404")  # Orange
+        self.tree.tag_configure("empty_stock", background="#f8d7da", foreground="#721c24") # Red
+        self.tree.tag_configure("normal", background="white", foreground="black")
 
+    def start_auto_refresh(self):
+        self.refresh_table()
+        self.root.after(30000, self.start_auto_refresh)
+        
     def save_product(self):
         try:
             sku = self.entries["SKU:"].get()
