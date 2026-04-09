@@ -1,3 +1,4 @@
 psycopg2
-tkinter
-sqlite3
+tk
+pytest
+pytest-cov
